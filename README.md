@@ -1,4 +1,4 @@
-# hello-world3
+# fhevmjs-vue-template
 
 ## Project setup
 ```
