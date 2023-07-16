@@ -4,19 +4,17 @@
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build"
+    "build": "vue-cli-service build",
+    "get:contracts": "git submodule init && git submodule update --remote"
   },
   "dependencies": {
     "core-js": "^3.8.3",
     "ethers": "^6.6.3",
-    "fhevmjs": "^0.0.5",
-    "libsodium": "^0.7.11",
-    "libsodium-wrappers": "^0.7.11",
-    "vue": "^3.2.13"
+    "fhevmjs": "^0.0.7",
+    "vue": "^3.3.4"
   },
   "devDependencies": {
     "@babel/plugin-transform-private-methods": "^7.22.5",
-    "@types/libsodium-wrappers": "^0.7.10",
     "@vue/cli-plugin-babel": "~5.0.0",
     "@vue/cli-plugin-typescript": "~5.0.0",
     "@vue/cli-service": "~5.0.0",

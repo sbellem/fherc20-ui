@@ -18,7 +18,8 @@
     ],
     "paths": {
       "@/*": [
-        "src/*"
+        "src/*",
+        "types/*"
       ]
     },
     "lib": [
@@ -30,6 +31,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "contracts/types/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.vue",
     "tests/**/*.ts",
@@ -37,6 +39,7 @@
     "types/global.d.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "contracts/node_modules"
   ]
 }

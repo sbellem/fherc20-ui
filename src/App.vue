@@ -4,85 +4,163 @@
   </div>
   <div v-else style="display: flex; flex-direction: column; align-items: center">
     Welcome!
-    <button @click="encrypt(10)" style="width: 100px">Encrypt</button>
-    <div v-if="encryptedNumber !== ''" style="width: 500px; overflow-wrap: break-word">
-      {{  encryptedNumber }}
+    <button @click="refreshBalances()" style="width: 100px">Refresh Balances</button>
+    <div style="width: 500px; overflow-wrap: break-word">
+      # of tokens: {{ balance }}
     </div>
-    <button @click="decrypt()" style="width: 100px">Decrypt</button>
+      <div style="width: 500px; overflow-wrap: break-word">
+          # of wrapped tokens: {{  encryptedBalance }}
+      </div>
+    <button @click="wrap(10)" style="width: 100px">Wrap 10</button>
+    <button @click="unwrap(10)" style="width: 100px">Unwrap 10</button>
+    <button @click="sendToContract(10)" style="width: 100px">Transfer 10</button>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, ref } from 'vue';
-import { BrowserProvider } from 'ethers';
-import { FhevmInstance } from 'fhevmjs';
+import {defineComponent, ref} from 'vue';
+import { BrowserProvider, ethers } from 'ethers';
+import {FhevmInstance} from 'fhevmjs';
+import DeployedContract from "../contracts/deployments/localfhenix/WrappingERC20.json";
+import {WrappingERC20__factory} from "../contracts/types";
 
-const CHAIN_ID = 5432;
-
-var provider : BrowserProvider;
-
-function toHexString(byteArray: Uint8Array) {
-  return Array.from(byteArray, byte => {
-    return ('0' + (byte & 0xFF).toString(16)).slice(-2);
-  }).join('');
-}
+let provider : BrowserProvider;
 
 export default defineComponent({
-  name: 'App',
-  components: {},
-  setup() {
-    const instance = ref<FhevmInstance | undefined>(undefined);
-    return { instance };
-  },
-  data() {
-    return {
-      loading: true,
-      encryptedNumber: "",
-      decryptNumber: ""
-    };
-  },
-  mounted() {
-    var self = this;
-    const initInstance = async () => {
-      const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
-      provider = new BrowserProvider((global as any).ethereum);
-      let publicKey = localStorage.getItem('fhepubkey');
-      if (!publicKey) {
-        publicKey = await provider.call({ from: null, to: '0x0000000000000000000000000000000000000044' });
-        localStorage.setItem('fhepubkey', publicKey);
-      }
-      const chainId = parseInt(chainIdHex, 16);
-      
-      if (chainId !== CHAIN_ID) throw new Error(`Invalid port ${chainId}`);
-      return window.fhevm.createInstance({ chainId, publicKey });
-    };
-
-    this.loadScript('static/fhevm.min.js', () => {
-      window.fhevm.initFhevm().then( async () => {
-        this.loading = false;
-        self.instance = await initInstance();
-
-      }).catch( (err: any) => {
-        console.log(err);
-      });
-    });
-  },
-  methods: {
-    encrypt(num: number) {
-      if (this.instance) {
-        this.encryptedNumber = `0x` + toHexString(this.instance.encrypt32(num));
-      }
+    name: 'App',
+    components: {},
+    setup() {
+        const instance = ref<FhevmInstance | undefined>(undefined);
+        return {instance};
     },
-    async decrypt() {
-      if (this.instance) {
-        try {
-          // interact with contract here
-        } catch (err) {
-          console.log(err);
+    data() {
+        return {
+            loading: true,
+            encryptedBalance: 0,
+            balance: '0',
+        };
+    },
+    mounted() {
+        let self = this;
+        const initInstance = async () => {
+
+            const chainIdHex = await window.ethereum.request({method: 'eth_chainId'});
+            const thisProvider = new ethers.BrowserProvider(window.ethereum)
+
+            let publicKey = localStorage.getItem('fhepubkey');
+            if (!publicKey || publicKey === "0x") {
+                publicKey = await thisProvider.call({from: null, to: '0x0000000000000000000000000000000000000044'});
+                if (publicKey) {
+                    localStorage.setItem('fhepubkey', publicKey);
+                }
+            }
+            const chainId = parseInt(chainIdHex, 16);
+            return window.fhevm.createInstance({chainId, publicKey});
+        };
+
+        this.loadScript('static/fhevm.min.js', () => {
+            window.fhevm.initFhevm().then(async () => {
+                this.loading = false;
+                self.instance = await initInstance();
+
+                this.refreshBalances();
+
+            }).catch((err: any) => {
+                console.log(err);
+            });
+        });
+    },
+    methods: {
+        async wrap (input: number) {
+            if (!this.instance) {
+                alert("fhe not initialized");
+                return;
+            }
+            const thisProvider = new ethers.BrowserProvider(window.ethereum)
+            let signer = await thisProvider.getSigner();
+            // @ts-ignore
+            const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
+            await werc20.wrap(input)
+            this.refreshBalances();
+        },
+        async unwrap (input: number) {
+            if (!this.instance) {
+                alert("fhe not initialized");
+                return;
+            }
+            const thisProvider = new ethers.BrowserProvider(window.ethereum)
+
+            let signer = await thisProvider.getSigner();
+            // @ts-ignore
+            const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
+            await werc20.unwrap(input);
+            this.refreshBalances();
+        },
+
+        async sendToContract (input: number) {
+            if (!this.instance) {
+                alert("fhe not initialized");
+                return;
+            }
+            const thisProvider = new ethers.BrowserProvider(window.ethereum)
+
+            let signer = await thisProvider.getSigner();
+            // @ts-ignore
+            const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
+
+            let encToSend = await this.instance.encrypt32(input);
+
+            // for example purposes just send to the contract
+            await werc20.transferEncrypted(DeployedContract.address, encToSend);
+            this.refreshBalances();
+        },
+
+        async refreshBalances() {
+            await this.getBalance();
+            await this.getEncryptedBalance();
+        },
+
+        async getBalance() {
+            const thisProvider = new ethers.BrowserProvider(window.ethereum)
+            let signer = await thisProvider.getSigner();
+            // @ts-ignore
+            const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
+            try {
+                let address = await signer.getAddress();
+                console.log(`address: ${address}`)
+                let balanceFromChain = await werc20.balanceOf(address);
+                console.log(`balance: ${balanceFromChain}`)
+                this.balance = (await werc20.balanceOf(await signer.getAddress())).toString()
+            } catch (e) {
+                console.log(`failed to query balance: ${e}`)
+                this.balance = '0'
+            }
+        },
+
+        async getEncryptedBalance(): Promise<number> {
+            const thisProvider = new ethers.BrowserProvider(window.ethereum)
+            let signer = await thisProvider.getSigner();
+            let contractAddress = DeployedContract.address;
+            // @ts-ignore
+            const werc20 = WrappingERC20__factory.connect(contractAddress, signer)
+
+            if (this.instance) {
+                let publicKey = this.instance.getTokenSignature(contractAddress)?.publicKey;
+                if (!publicKey) {
+                    publicKey = await this.instance.generateToken({verifyingContract: contractAddress}).publicKey;
+                }
+                try {
+                    let encBalance = await werc20.balanceOfEncrypted(publicKey);
+
+                    this.encryptedBalance = this.instance.decrypt(contractAddress, encBalance);
+                } catch (e) {
+
+                }
+            }
+
+            return 0
         }
-      }
     },
-  }
 });
 </script>
 
