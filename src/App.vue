@@ -20,7 +20,10 @@
 <script lang="ts">
 import {defineComponent, ref} from 'vue';
 import { BrowserProvider, ethers } from 'ethers';
-import {FhevmInstance} from 'fhevmjs';
+
+import { initFhevm, createInstance, FhevmInstance } from 'fhevmjs';
+
+// can use this, hard code the address or any other way to map the contract address
 import DeployedContract from "../contracts/deployments/localfhenix/WrappingERC20.json";
 import {WrappingERC20__factory} from "../contracts/types";
 
@@ -30,10 +33,14 @@ export default defineComponent({
     name: 'App',
     components: {},
     setup() {
+        const loading = ref(true);
+        const encryptedBalance = ref(0);
+        const balance = ref('0');
+
         const instance = ref<FhevmInstance | undefined>(undefined);
         return {instance};
     },
-    data() {
+    data(): { loading: boolean; encryptedBalance: number; balance: string } {
         return {
             loading: true,
             encryptedBalance: 0,
@@ -43,7 +50,7 @@ export default defineComponent({
     mounted() {
         let self = this;
         const initInstance = async () => {
-
+            await initFhevm();
             const chainIdHex = await window.ethereum.request({method: 'eth_chainId'});
             const thisProvider = new ethers.BrowserProvider(window.ethereum)
 
@@ -55,20 +62,16 @@ export default defineComponent({
                 }
             }
             const chainId = parseInt(chainIdHex, 16);
-            return window.fhevm.createInstance({chainId, publicKey});
+            return createInstance({chainId, publicKey});
         };
-
-        this.loadScript('static/fhevm.min.js', () => {
-            window.fhevm.initFhevm().then(async () => {
+        initInstance().then(
+            (instance) => {
                 this.loading = false;
-                self.instance = await initInstance();
-
+                this.instance = instance;
                 this.refreshBalances();
+            }
+        );
 
-            }).catch((err: any) => {
-                console.log(err);
-            });
-        });
     },
     methods: {
         async wrap (input: number) {
@@ -78,9 +81,15 @@ export default defineComponent({
             }
             const thisProvider = new ethers.BrowserProvider(window.ethereum)
             let signer = await thisProvider.getSigner();
-            // @ts-ignore
-            const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
-            await werc20.wrap(input)
+
+            try {
+                // @ts-ignore
+                const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
+                await werc20.wrap(input)
+            } catch (e) {
+
+            }
+
             this.refreshBalances();
         },
         async unwrap (input: number) {
@@ -91,9 +100,11 @@ export default defineComponent({
             const thisProvider = new ethers.BrowserProvider(window.ethereum)
 
             let signer = await thisProvider.getSigner();
-            // @ts-ignore
-            const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
-            await werc20.unwrap(input);
+            try {
+                // @ts-ignore
+                const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
+                await werc20.unwrap(input)
+            } catch (e) {}
             this.refreshBalances();
         },
 
@@ -105,13 +116,17 @@ export default defineComponent({
             const thisProvider = new ethers.BrowserProvider(window.ethereum)
 
             let signer = await thisProvider.getSigner();
-            // @ts-ignore
-            const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
+            try {
+                // @ts-ignore
+                const werc20 = WrappingERC20__factory.connect(DeployedContract.address, signer)
 
-            let encToSend = await this.instance.encrypt32(input);
+                let encToSend = await this.instance.encrypt32(input);
 
-            // for example purposes just send to the contract
-            await werc20.transferEncrypted(DeployedContract.address, encToSend);
+                // for example purposes just send to the contract
+                await werc20.transferEncrypted(DeployedContract.address, encToSend);
+            } catch (e) {
+                alert(`error: ${e}`)
+            }
             this.refreshBalances();
         },
 
