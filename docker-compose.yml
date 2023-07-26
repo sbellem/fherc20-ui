@@ -1,0 +1,23 @@
+version: "3.9"
+services:
+  fhenixnode:
+    image: ghcr.io/fhenixprotocol/fhenix-devnet:0.1.6
+    ports:
+      - "8545:8545"
+      - "6000:6000"
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "evmosd status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "58080:8080"
+    command: bash -c "cd contracts && pnpm faucet && sleep 10 && pnpm deploy:contracts && cd .. && pnpm serve"
+    depends_on:
+      fhenixnode:
+        condition: service_healthy
